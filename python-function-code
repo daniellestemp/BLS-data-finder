@@ -1,0 +1,84 @@
+# Import required libraries for the task
+import requests
+import json
+import pandas as pd
+from IPython.display import display
+
+# Define the function to get BLS data for a given year
+def get_bls_data(year, to_csv=False, filename=None):
+        # Set headers for the API request
+        headers = {'Content-type': 'application/json'}
+        # Define the series IDs for different data categories
+        series_ids = {
+            "union_member_count_in_thousands": "LUU0203161800",
+            "union_represented_count_in_thousands": "LUU0203161900",
+            "union_member_percent": "LUU0204899600",
+            "union_represented_percent": "LUU0204899700",
+            "union_member_percent_private_sector": "LUU0204906600",
+            "union_member_percent_mining": "LUU0204910400",
+            "union_member_percent_construction": "LUU0204910500",
+            "union_member_percent_manufacturing": "LUU0204910600",
+            "union_member_percent_wholesale_retail_trade": "LUU0204910900",
+            "union_member_percent_transportation_utilities": "LUU0204911200",
+            "union_member_percent_information": "LUU0204911500",
+            "union_member_percent_professional_business_services": "LUU0204912800",
+            "union_member_percent_education_health_services": "LUU0204913100",
+            "union_member_percent_leisure_hospitality": "LUU0204913400",
+            "union_member_percent_other_services": "LUU0204913900",
+            "union_member_percent_government": "LUU0204922700",
+            "union_member_median_weekly_earnings": "LUU0253169100",
+            "non_union_median_weekly_earnings": "LUU0253169300"
+        }
+
+        # Send the API request to fetch the time series data
+        response = requests.post(
+            'https://api.bls.gov/publicAPI/v1/timeseries/data/',
+            data=json.dumps({
+                "seriesid": list(series_ids.values()), 
+                "startyear": str(year), 
+                "endyear": str(year)  
+            }),
+            headers=headers  
+        )
+        # Check if request was successful (status code 200)
+        if response.status_code != 200:
+            raise Exception(f"API request failed with status code {response.status_code}")
+        
+        # Parse response data as JSON
+        data = response.json()
+
+        # Extract and process the results
+        results = {}
+        # Iterate over each series in response
+        for series in data['Results']['series']:  
+            series_id = series['seriesID']
+            label = [k for k, v in series_ids.items() if v == series_id][0]
+            # Assumes annual values; to adjust for monthly series: 'M01' <= item['period'] <= 'M12']
+            values = [float(item['value']) for item in series['data'] if item['period'] == 'A01']  
+            # Calculate the average value for the year and store in results (if values exist)
+            results[label] = round(sum(values) / len(values), 2) if values else None
+
+        # Create a pandas DataFrame to organize the results
+        df = pd.DataFrame([
+            {
+                # Format series name (e.g., "union_member_percent" -> "Union Member Percent")
+                "Series Title": k.replace("_", " ").title(),
+                f"Value ({year})": v 
+            }
+            for k, v in results.items()
+        # Sort DataFrame by "Series Title" column    
+        ]).sort_values("Series Title").reset_index(drop=True)
+
+        # Display DataFrame in output
+        display(df)
+
+        # Optional: Export to CSV if 'to_csv' is True and a filename is provided
+        if to_csv and filename:
+            df.to_csv(filename, index=False)
+
+#Example Usage
+# Display BLS data for a single year
+get_bls_data(2022)
+
+# Display and save results to a CSV file
+get_bls_stats(2022, to_csv=True, filename="bls_2022.csv")
